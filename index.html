@@ -798,7 +798,7 @@ function viewToday() {
     '<p>' + dayAdvice(score, lv) + '</p>' +
     '<div class="mini">已记录 ' + todayMealCount(date) + '/3 餐 · 加餐 ' + extras.length + ' 次 · 现在：' + SLOTS[now].label + '</div>' +
     '</div></div></header>' +
-    tip + adjCard(date) +
+    tip + installCardHTML() + adjCard(date) +
     mealCard(date, 'breakfast') +
     mealCard(date, 'lunch') +
     extraCard(date, 'snack') +
@@ -911,26 +911,51 @@ function viewHistory() {
 }
 
 /* ---------------- 设置视图 ---------------- */
+function manualInstallSteps() {
+  return '<div class="small" style="line-height:2"><b>按你在用的浏览器操作：</b><br>' +
+    '· <b>Chrome / Edge</b>：菜单「⋮」→「<b>添加到主屏幕</b>」或「安装应用」<br>' +
+    '· <b>小米自带浏览器</b>：底部「≡」→「工具」→「<b>添加到桌面</b>」<br>' +
+    '· <b>夸克</b>：底部「≡」→「工具箱」→「<b>添加到桌面</b>」<br>' +
+    '· 其他浏览器：菜单里找「添加到桌面 / 添加到主屏幕」<br>' +
+    '<span class="muted">小米/红米加完桌面没图标：手机设置 → 应用管理 → 找到这个浏览器 → 权限 →「桌面快捷方式」设为允许，再添加一次。</span></div>';
+}
+function installSheetBody() {
+  const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  if (standalone) return '<div class="desc" style="margin-top:6px">✅ 已经是桌面 App 模式：全屏运行、离线可用、数据存在本机。</div>';
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (deferredInstall) {
+    return '<button class="btn primary" style="width:100%;margin:6px 0 10px" data-act="installapp">⬇ 一键安装到桌面</button>' +
+      '<div class="small" style="line-height:1.9;margin-bottom:8px">会弹出系统确认框，点「安装」。没弹出来就用下面的手动方法：</div>' + manualInstallSteps();
+  }
+  if (isIOS) {
+    return '<div class="small" style="margin-top:6px;line-height:2">1️⃣ 用 <b>Safari</b> 打开本页<br>2️⃣ 点底部「分享」⬆ 按钮<br>3️⃣ 下滑选「<b>添加到主屏幕</b>」→「添加」<br>桌面出现「饮食管家」图标，点开全屏、可离线。</div>';
+  }
+  return manualInstallSteps();
+}
+function installSheet() {
+  openSheet('<h2>装到手机桌面</h2>' + installSheetBody() +
+    '<div class="sheet-foot"><button class="btn primary" data-act="closesheet">知道了</button></div>');
+}
+function installCardHTML() {
+  const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  if (standalone) return '';
+  const hideTs = state.settings.installHideTs || 0;
+  if (Date.now() - hideTs < 7 * 24 * 3600 * 1000) return '';
+  return '<div class="tip"><div>📲 <b>装到手机桌面</b>：像 App 一样点开，离线也能用</div>' +
+    '<button class="btn primary" style="flex:0 0 auto;padding:8px 14px;margin-right:4px" data-act="installopen">安装</button>' +
+    '<button data-act="installhide">×</button></div>';
+}
 function installHelpHTML() {
   const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isFile = location.protocol === 'file:';
   let body;
-  if (standalone) {
-    body = '<div class="desc" style="margin-top:6px">✅ 已是桌面 App 模式：全屏运行、离线可用、数据存在本机。</div>';
-  } else if (isFile) {
+  if (isFile && !standalone) {
     body = '<div class="desc" style="margin-top:6px;color:#9E3F35">现在是直接打开文件（file://），装不了桌面图标，有些浏览器还不让存数据。</div>' +
       '<div class="small" style="margin-top:8px;line-height:1.9">二选一：<br>' +
       '<b>① 托管（推荐，一劳永逸）</b>：把整个文件夹免费部署到 Vercel / Gitee Pages，拿到一个 https 网址，安卓 iPhone 都能装、随时能开。<br>' +
       '<b>② 局域网（临时用）</b>：电脑双击本文件夹里的「启动服务.bat」，手机连同一个 Wi-Fi 打开显示的地址。iPhone 可直接加到主屏幕；安卓因为不是 https，只能加书签快捷方式。</div>';
-  } else if (deferredInstall) {
-    body = '<button class="btn primary" style="width:100%;margin:6px 0 10px" data-act="installapp">⬇ 一键安装到桌面</button>' +
-      '<div class="small" style="line-height:1.9">点上面按钮，系统会弹出安装确认，桌面出现图标后就是全屏 App，可离线。<br>' +
-      '按钮没反应的话：浏览器右上角「⋮」→「安装应用」。</div>';
-  } else if (isIOS) {
-    body = '<div class="small" style="margin-top:6px;line-height:1.9">用 <b>Safari</b> 打开本页 → 点底部「分享」⬆ → <b>「添加到主屏幕」</b> → 桌面出现「饮食管家」图标，点开就是全屏 App，可离线。</div>';
   } else {
-    body = '<div class="small" style="margin-top:6px;line-height:1.9">用 <b>Chrome / Edge</b> 打开本页 → 右上角「⋮」→ <b>「安装应用」</b>或<b>「添加到主屏幕」</b> → 桌面出现图标，点开全屏运行，可离线。</div>';
+    body = installSheetBody();
   }
   return '<div class="sec"><h3>装到手机桌面（像 App 一样用）</h3>' + body + '</div>';
 }
@@ -1542,6 +1567,12 @@ function handle(act, ds) {
       state.settings.snackAlert = !state.settings.snackAlert; save(); render(true);
       break;
 
+    case 'installopen':
+      installSheet();
+      break;
+    case 'installhide':
+      state.settings.installHideTs = Date.now(); save(); render(true);
+      break;
     case 'installapp':
       if (deferredInstall) {
         deferredInstall.prompt();
