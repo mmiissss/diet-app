@@ -1,5 +1,5 @@
 /* 离线缓存：安装后离线也能打开，数据仍存在本机 */
-const CACHE = 'acne-diet-v3';
+const CACHE = 'acne-diet-v4';
 const ASSETS = [
   './',
   './index.html',

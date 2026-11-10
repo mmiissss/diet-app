@@ -279,6 +279,11 @@ const DEFAULT_FOODS = [
   { id:'b6', name:'白粥',        cat:'breakfast', slots:['breakfast','late'], risk:2, tags:['gi'] },
   { id:'b7', name:'煎饼',        cat:'breakfast', slots:['breakfast'], risk:2, tags:['gi','fried'] },
   { id:'b8', name:'红薯',        cat:'breakfast', slots:['breakfast','late'], risk:1, tags:['gi'] },
+  { id:'b9', name:'小米粥',      cat:'breakfast', slots:['breakfast','late'], risk:1, tags:['gi'] },
+  { id:'b10', name:'茶叶蛋',     cat:'breakfast', slots:['breakfast','snack','late'], risk:1, tags:[] },
+  { id:'b11', name:'蒸玉米',     cat:'breakfast', slots:['breakfast','snack','late'], risk:1, tags:[] },
+  { id:'b12', name:'馒头',       cat:'breakfast', slots:['breakfast'], risk:2, tags:['gi'] },
+  { id:'b13', name:'蒸饺（素）', cat:'breakfast', slots:['breakfast'], risk:2, tags:['gi'] },
   { id:'m1', name:'食堂二荤一素', cat:'main', slots:['lunch','dinner'], risk:2, tags:['fried'] },
   { id:'m2', name:'健康自选菜',   cat:'main', slots:['lunch','dinner','late'], risk:1, tags:[] },
   { id:'m3', name:'兰州拉面',     cat:'main', slots:['lunch','dinner','late'], risk:2, tags:['gi'] },
@@ -287,13 +292,25 @@ const DEFAULT_FOODS = [
   { id:'m6', name:'烤鸭饭',       cat:'main', slots:['lunch','dinner'], risk:3, tags:['fried','gi'] },
   { id:'m7', name:'冒菜',         cat:'main', slots:['lunch','dinner'], risk:3, tags:['fried'] },
   { id:'m8', name:'炒面',         cat:'main', slots:['lunch','dinner'], risk:3, tags:['gi','fried'] },
+  { id:'m9', name:'米饭套餐（清淡窗口）', cat:'main', slots:['lunch','dinner'], risk:1, tags:[] },
+  { id:'m10', name:'黄焖鸡米饭',  cat:'main', slots:['lunch','dinner'], risk:2, tags:['gi'] },
+  { id:'m11', name:'番茄鸡蛋面',  cat:'main', slots:['lunch','dinner','late'], risk:1, tags:['gi'] },
+  { id:'m12', name:'清汤麻辣烫（多菜）', cat:'main', slots:['lunch','dinner'], risk:2, tags:[] },
+  { id:'m13', name:'水饺',        cat:'main', slots:['lunch','dinner','late'], risk:2, tags:['gi'] },
+  { id:'m14', name:'麻辣香锅',    cat:'main', slots:['lunch','dinner'], risk:3, tags:['fried','gi'] },
+  { id:'m15', name:'烤冷面',      cat:'main', slots:['lunch','dinner','late'], risk:3, tags:['gi','fried'] },
   { id:'s1', name:'酸奶',         cat:'snack', slots:['snack','late'], risk:2, tags:['dairy','gi'] },
   { id:'s2', name:'坚果（一小把）', cat:'snack', slots:['snack','late'], risk:2, tags:[] },
   { id:'s3', name:'饼干',         cat:'snack', slots:['snack','late'], risk:3, tags:['gi','fried'] },
   { id:'s4', name:'奶茶',         cat:'snack', slots:['snack','late'], risk:3, tags:['dairy','gi'] },
   { id:'s5', name:'水果（苹果/蓝莓）', cat:'snack', slots:['snack','late'], risk:1, tags:[] },
   { id:'s6', name:'毛豆',         cat:'snack', slots:['snack','late'], risk:1, tags:[] },
-  { id:'s7', name:'黑巧（一小块）', cat:'snack', slots:['snack','late'], risk:2, tags:['gi'] }
+  { id:'s7', name:'黑巧（一小块）', cat:'snack', slots:['snack','late'], risk:2, tags:['gi'] },
+  { id:'s8', name:'关东煮（萝卜/海带）', cat:'snack', slots:['snack','late'], risk:1, tags:[] },
+  { id:'s9', name:'无糖酸奶',     cat:'snack', slots:['snack','late'], risk:1, tags:['dairy'] },
+  { id:'s10', name:'美式咖啡（无糖）', cat:'snack', slots:['breakfast','snack','late'], risk:1, tags:[] },
+  { id:'s11', name:'烤肠',        cat:'snack', slots:['snack','late'], risk:3, tags:['fried'] },
+  { id:'s12', name:'冰红茶（含糖饮料）', cat:'snack', slots:['snack','late'], risk:3, tags:['gi'] }
 ];
 
 /* ---------------- 存储 ---------------- */
@@ -328,6 +345,15 @@ if (!state) {
     plans: {}
   };
 }
+/* 老用户升级：把新版默认食物合并进来（不覆盖你改过的） */
+(function mergeNewFoods() {
+  const have = new Set(state.foods.map(f => f.id));
+  let added = 0;
+  DEFAULT_FOODS.forEach(f => {
+    if (!have.has(f.id)) { state.foods.push(JSON.parse(JSON.stringify(f))); added++; }
+  });
+  if (added) localStorage.setItem(LS_KEY + '_touch', String(Date.now()));
+})();
 function save() {
   try {
     const raw = JSON.stringify(state);
@@ -335,6 +361,7 @@ function save() {
     else memStore = raw;
   } catch (e) {}
 }
+save();
 
 /* ---------------- 工具 ---------------- */
 const pad = n => String(n).padStart(2, '0');
@@ -474,8 +501,14 @@ function generateWeekPlan(start) {
           if (alt.length) pool.push(...alt);
         }
         if (!pool.length) { ok = false; break; }
-        const minUse = Math.min(...pool.map(f => cnt[f.id] || 0));
-        const cands = shuffle(pool.filter(f => (cnt[f.id] || 0) <= minUse + (Math.random() < 0.4 ? 1 : 0)));
+        /* 正餐优先低中风险：高致痘主餐只占少数，受每周上限约束 */
+        let usePool = pool;
+        if (slot !== 'breakfast') {
+          const low = pool.filter(f => f.risk <= 2);
+          if (low.length && Math.random() < 0.8) usePool = low;
+        }
+        const minUse = Math.min(...usePool.map(f => cnt[f.id] || 0));
+        const cands = shuffle(usePool.filter(f => (cnt[f.id] || 0) <= minUse + (Math.random() < 0.4 ? 1 : 0)));
         const f = cands[0] || pool[0];
         day[slot] = f.id;
         cnt[f.id] = (cnt[f.id] || 0) + 1;
@@ -855,12 +888,16 @@ function viewHistory() {
     }
   }
 
-  const list = days.slice().reverse().filter(d => d.data).map(d =>
-    '<div class="histrow"><span class="dot" style="background:' + d.lv.color + '"></span>' +
-    '<span class="d">' + mdOf(d.date) + ' ' + wdOf(d.date) + '</span>' +
-    '<span class="muted">' + (d.pods ? '有新痘' : '') + '</span>' +
-    '<span class="s">' + d.score + ' 分 · ' + d.lv.label + (d.skin ? ' · 痘 ' + d.skin : '') + '</span></div>'
-  ).join('') || '<div class="empty">还没有记录，去“今日”记一餐试试</div>';
+  const list = days.slice().reverse().map(d => {
+    const detail = d.data
+      ? '<span class="s">' + d.score + ' 分 · ' + d.lv.label + (d.skin ? ' · 痘 ' + d.skin : '') + '</span>'
+      : '<span class="muted">未记 · 点我补</span>';
+    return '<div class="histrow" data-act="dayedit" data-date="' + d.date + '" style="cursor:pointer">' +
+      '<span class="dot" style="background:' + (d.data ? d.lv.color : '#E3DFD4') + '"></span>' +
+      '<span class="d">' + mdOf(d.date) + ' ' + wdOf(d.date) + '</span>' +
+      '<span class="muted">' + (d.pods ? '有新痘' : '') + '</span>' + detail +
+      '<span class="muted" style="flex:0 0 auto">›</span></div>';
+  }).join('');
 
   return '<h1 style="font-size:21px;margin-bottom:4px">记录与规律</h1>' +
     '<p class="muted" style="margin-bottom:14px">近 7 天致痘负荷</p>' +
@@ -868,7 +905,8 @@ function viewHistory() {
     '<div class="legend" style="margin-top:12px">绿 ≤8 · 黄 9-15 · 红 ≥16（满分 24）</div></div>' +
     '<div class="card"><h3 style="font-size:14.5px;margin-bottom:6px">你的规律</h3>' +
     '<div class="small">' + insight + '</div></div>' +
-    '<div class="card"><h3 style="font-size:14.5px;margin-bottom:2px">近 14 天</h3>' + list + '</div>' +
+    '<div class="card"><h3 style="font-size:14.5px;margin-bottom:2px">近 14 天</h3>' +
+    '<div class="small" style="margin-bottom:6px">点任意一天可补记 / 修改三餐、加餐和皮肤分</div>' + list + '</div>' +
     '<div class="small">这是饮食记录工具，不构成医疗建议。反复严重爆痘请看皮肤科。</div>';
 }
 
@@ -885,6 +923,10 @@ function installHelpHTML() {
       '<div class="small" style="margin-top:8px;line-height:1.9">二选一：<br>' +
       '<b>① 托管（推荐，一劳永逸）</b>：把整个文件夹免费部署到 Vercel / Gitee Pages，拿到一个 https 网址，安卓 iPhone 都能装、随时能开。<br>' +
       '<b>② 局域网（临时用）</b>：电脑双击本文件夹里的「启动服务.bat」，手机连同一个 Wi-Fi 打开显示的地址。iPhone 可直接加到主屏幕；安卓因为不是 https，只能加书签快捷方式。</div>';
+  } else if (deferredInstall) {
+    body = '<button class="btn primary" style="width:100%;margin:6px 0 10px" data-act="installapp">⬇ 一键安装到桌面</button>' +
+      '<div class="small" style="line-height:1.9">点上面按钮，系统会弹出安装确认，桌面出现图标后就是全屏 App，可离线。<br>' +
+      '按钮没反应的话：浏览器右上角「⋮」→「安装应用」。</div>';
   } else if (isIOS) {
     body = '<div class="small" style="margin-top:6px;line-height:1.9">用 <b>Safari</b> 打开本页 → 点底部「分享」⬆ → <b>「添加到主屏幕」</b> → 桌面出现「饮食管家」图标，点开就是全屏 App，可离线。</div>';
   } else {
@@ -982,9 +1024,77 @@ function swapSheet(date, slot) {
       : ''));
 }
 
+/* 补记某天的某一餐：直接写进那天的记录（不动计划） */
+function pickSheet(date, slot) {
+  const pool = state.foods.filter(f => f.slots.indexOf(slot) >= 0);
+  const sorted = pool.slice().sort((a, b) => foodBase(a) - foodBase(b));
+  const list = sorted.map(f =>
+    '<button class="pick" data-act="dopick" data-date="' + date + '" data-slot="' + slot + '" data-id="' + f.id + '">' +
+    '<span class="nm">' + esc(f.name) + '</span><span class="sc">+' + foodBase(f) + '</span>' +
+    '<span class="chip ' + RISK[f.risk].cls + '">' + RISK[f.risk].label + '</span></button>'
+  ).join('');
+  openSheet('<h2>补记 · ' + SLOTS[slot].label + '</h2>' +
+    '<div class="sub">记到 ' + mdOf(date) + ' ' + wdOf(date) + ' · 份量选完还能改</div>' +
+    '<div class="picklist">' + list + '</div>' +
+    '<div class="sheet-foot"><button class="btn" data-act="skiplog" data-date="' + date + '" data-slot="' + slot + '">这餐没吃</button></div>');
+}
+
+/* 某一天的完整补记/修改面板 */
+function daySheet(date) {
+  const log = state.logs[date] || { meals: {}, extras: [] };
+  const meals = log.meals || {};
+  const extras = log.extras || [];
+  const slotRows = ['breakfast', 'lunch', 'dinner'].map(slot => {
+    const m = meals[slot];
+    let head;
+    if (m && m.skip) head = '<span class="muted">这餐没吃</span>';
+    else if (m) {
+      const f = resolveEntry(m);
+      head = f ? '<b>' + esc(f.name) + '</b> <span class="muted">+' + itemScore(f, m.portion) + ' 分</span>'
+               : '<span class="muted">（食物已删除）</span>';
+    } else head = '<span class="muted">未记</span>';
+    const actions =
+      '<button class="ghost" data-act="picklog" data-date="' + date + '" data-slot="' + slot + '">' + (m ? '换' : '记') + '</button>' +
+      (m ? '<button class="ghost" data-act="clearslot" data-date="' + date + '" data-slot="' + slot + '">清除</button>' : '');
+    const portionChips = (m && !m.skip)
+      ? '<div class="chiprow" style="margin-top:8px">' +
+        Object.keys(PORTION).map(p =>
+          '<button class="chipbtn ' + ((m.portion || 'ok') === p ? 'on' : '') + '" data-act="mealportion" data-date="' + date + '" data-slot="' + slot + '" data-value="' + p + '">' + PORTION[p] + '</button>'
+        ).join('') + '</div>'
+      : '';
+    return '<div style="padding:10px 0;border-bottom:1px solid #ECE8DE">' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+      '<span class="muted" style="flex:0 0 42px">' + SLOTS[slot].label + '</span>' +
+      '<span style="flex:1;min-width:0">' + head + '</span>' + actions + '</div>' + portionChips + '</div>';
+  }).join('');
+  const extraRows = extras.map((x, i) => {
+    const f = resolveEntry(x);
+    const slotLabel = SLOTS[x.slot] ? SLOTS[x.slot].label : '';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0">' +
+      '<span style="flex:1;min-width:0">' + (f ? esc(f.name) : '（已删除）') +
+      ' <span class="muted">' + slotLabel + ' +' + itemScore(f, x.portion) + ' 分</span></span>' +
+      '<button class="ghost" data-act="delextra" data-date="' + date + '" data-idx="' + i + '">删</button></div>';
+  }).join('') || '<div class="muted" style="padding:6px 0">没有加餐</div>';
+  const skin = log.skin || 0;
+  const skinChips = [1, 2, 3, 4, 5].map(n =>
+    '<button class="chipbtn ' + (skin === n ? 'on' : '') + '" data-act="skin" data-date="' + date + '" data-score="' + n + '">' + n + '</button>'
+  ).join('');
+  openSheet('<h2>' + mdOf(date) + ' ' + wdOf(date) + ' · 补记/修改</h2>' +
+    '<div class="sub">改完立即生效：补了「吃撑了」，第二天的午/晚餐会自动降级</div>' +
+    slotRows +
+    '<div class="field" style="margin-top:12px"><span>加餐</span></div>' + extraRows +
+    '<button class="btn" style="width:100%;margin-top:6px" data-act="snackday" data-date="' + date + '" data-slot="snack">+ 补记加餐</button>' +
+    '<div class="field" style="margin-top:14px"><span>皮肤评分（1 最好 · 5 最差）</span><div class="chiprow">' + skinChips + '</div></div>' +
+    '<div class="field"><span>新痘</span><div class="chiprow">' +
+    '<button class="chipbtn ' + (log.newPods ? 'on' : '') + '" data-act="pods" data-date="' + date + '">' + (log.newPods ? '有新痘' : '没有') + '</button></div></div>' +
+    '<div class="sheet-foot"><button class="btn primary" data-act="closesheet">完成</button></div>');
+}
+
 function snackSheet(slot) {
+  const date = ui.snackDate || todayISO();
+  const isToday = date === todayISO();
   const pool = state.foods.filter(f => f.slots.indexOf(slot) >= 0).slice().sort((a, b) => foodBase(a) - foodBase(b));
-  const score = dayScore(todayISO());
+  const score = dayScore(date);
   const selScore = Array.from(ui.snackSel).reduce((s, id) => s + itemScore(foodById(id), ui.snackPortion), 0);
   const proj = +(score + selScore).toFixed(1);
   const projLv = levelOf(proj);
@@ -999,16 +1109,16 @@ function snackSheet(slot) {
   }).join('');
 
   openSheet('<h2>' + SLOTS[slot].label + '吃了什么</h2>' +
-    '<div class="sub">可多选 · 今天已 ' + score + ' 分（' + levelOf(score).label + '）</div>' +
+    '<div class="sub">可多选 · ' + (isToday ? '今天' : mdOf(date)) + '已 ' + score + ' 分（' + levelOf(score).label + '）</div>' +
     '<div class="picklist">' + list + '</div>' +
-    '<button class="link" style="margin-top:10px" data-act="custom" data-slot="' + slot + '" data-mode="extra">没找到？自己填一项</button>' +
+    (isToday ? '<button class="link" style="margin-top:10px" data-act="custom" data-slot="' + slot + '" data-mode="extra">没找到？自己填一项</button>' : '') +
     '<div class="field" style="margin-top:14px"><span>份量</span><div class="chiprow">' +
     Object.keys(PORTION).map(p => '<button class="chipbtn ' + (ui.snackPortion === p ? 'on' : '') + '" data-act="snackportion" data-value="' + p + '">' + PORTION[p] + '</button>').join('') +
     '</div></div>' +
-    (ui.snackSel.size ? '<div class="proj ' + (warnHigh ? 'bad' : '') + '">加入后今天 ' + proj + ' 分（' + projLv.label + '）' +
+    (ui.snackSel.size ? '<div class="proj ' + (warnHigh ? 'bad' : '') + '">加入后' + (isToday ? '今天' : '那天') + ' ' + proj + ' 分（' + projLv.label + '）' +
       (warnHigh ? ' · 会进入高负荷，明天主餐会被自动降级' : '') + '</div>' : '') +
     '<div class="sheet-foot"><button class="btn primary" ' + (ui.snackSel.size ? '' : 'disabled style="opacity:.45"') +
-    ' data-act="snackconfirm" data-slot="' + slot + '">' + (ui.snackSel.size ? '加入今日 (+' + selScore + ')' : '先选点东西') + '</button></div>');
+    ' data-act="snackconfirm" data-slot="' + slot + '">' + (ui.snackSel.size ? (isToday ? '加入今日' : '补到 ' + mdOf(date)) + ' (+' + selScore + ')' : '先选点东西') + '</button></div>');
 }
 
 function foodSheet() {
@@ -1254,9 +1364,59 @@ function handle(act, ds) {
     case 'snack':
       ui.snackSel = new Set();
       ui.snackPortion = 'ok';
+      ui.snackDate = today;
       ui.snackSheetSlot = ds.slot || 'snack';
       snackSheet(ui.snackSheetSlot);
       break;
+    case 'snackday':
+      ui.snackSel = new Set();
+      ui.snackPortion = 'ok';
+      ui.snackDate = ds.date || today;
+      ui.snackSheetSlot = ds.slot || 'snack';
+      snackSheet(ui.snackSheetSlot);
+      break;
+
+    /* ---- 历史补记 / 修改 ---- */
+    case 'dayedit':
+      daySheet(ds.date);
+      break;
+    case 'picklog':
+      pickSheet(ds.date, ds.slot);
+      break;
+    case 'dopick': {
+      const date = ds.date || today;
+      const log = state.logs[date] || (state.logs[date] = { meals: {}, extras: [] });
+      log.meals = log.meals || {};
+      log.extras = log.extras || [];
+      const prevPortion = (log.meals[ds.slot] && log.meals[ds.slot].portion) || 'ok';
+      log.meals[ds.slot] = { foodId: ds.id, portion: prevPortion, ts: Date.now() };
+      save(); render(true);
+      daySheet(date);
+      break;
+    }
+    case 'skiplog': {
+      const date = ds.date || today;
+      const log = state.logs[date] || (state.logs[date] = { meals: {}, extras: [] });
+      log.meals = log.meals || {};
+      log.extras = log.extras || [];
+      log.meals[ds.slot] = { skip: true, ts: Date.now() };
+      save(); render(true);
+      daySheet(date);
+      break;
+    }
+    case 'clearslot': {
+      const log = state.logs[ds.date];
+      if (log && log.meals) { delete log.meals[ds.slot]; save(); render(true); daySheet(ds.date); }
+      break;
+    }
+    case 'mealportion': {
+      const log = state.logs[ds.date];
+      if (log && log.meals && log.meals[ds.slot] && !log.meals[ds.slot].skip) {
+        log.meals[ds.slot].portion = ds.value;
+        save(); render(true); daySheet(ds.date);
+      }
+      break;
+    }
     case 'snacktoggle': {
       if (ui.snackSel.has(ds.id)) ui.snackSel.delete(ds.id);
       else ui.snackSel.add(ds.id);
@@ -1268,21 +1428,28 @@ function handle(act, ds) {
       snackSheet(ui.snackSheetSlot || 'snack');
       break;
     case 'snackconfirm': {
-      const log = state.logs[today] || (state.logs[today] = { meals: {}, extras: [] });
+      const date = ui.snackDate || today;
+      const log = state.logs[date] || (state.logs[date] = { meals: {}, extras: [] });
+      log.meals = log.meals || {};
       log.extras = log.extras || [];
       const ids = Array.from(ui.snackSel);
       ids.forEach(id => log.extras.push({ foodId: id, portion: ui.snackPortion, slot: ds.slot || 'snack', ts: Date.now() }));
-      save(); closeSheet();
+      save();
       const delta = ids.reduce((s, id) => s + itemScore(foodById(id), ui.snackPortion), 0);
-      const after = dayScore(today);
-      toast('加餐 +' + (+delta.toFixed(1)) + ' 分 · 今天 ' + after + ' 分（' + levelOf(after).label + '）' +
-        (after >= 16 ? '。晚餐按建议减量。' : ''));
+      const after = dayScore(date);
+      toast('加餐 +' + (+delta.toFixed(1)) + ' 分 · ' + (date === today ? '今天' : mdOf(date)) + ' ' + after + ' 分（' + levelOf(after).label + '）' +
+        (after >= 16 ? '。下一餐按建议减量。' : ''));
+      ui.snackDate = today;
+      if (date === today) closeSheet();
+      else daySheet(date);
       render(true);
       break;
     }
     case 'delextra': {
-      const log = state.logs[today];
+      const date = ds.date || today;
+      const log = state.logs[date];
       if (log && log.extras) { log.extras.splice(Number(ds.idx), 1); save(); render(true); }
+      if (date !== today) daySheet(date);
       break;
     }
     case 'extraportion': {
@@ -1296,15 +1463,19 @@ function handle(act, ds) {
       break;
     }
     case 'skin': {
-      const log = state.logs[today] || (state.logs[today] = { meals: {}, extras: [] });
+      const date = ds.date || today;
+      const log = state.logs[date] || (state.logs[date] = { meals: {}, extras: [] });
       log.skin = Number(ds.score);
       save(); render(true);
+      if (date !== today) daySheet(date);
       break;
     }
     case 'pods': {
-      const log = state.logs[today] || (state.logs[today] = { meals: {}, extras: [] });
+      const date = ds.date || today;
+      const log = state.logs[date] || (state.logs[date] = { meals: {}, extras: [] });
       log.newPods = !log.newPods;
       save(); render(true);
+      if (date !== today) daySheet(date);
       break;
     }
     case 'adj': {
@@ -1369,6 +1540,15 @@ function handle(act, ds) {
       break;
     case 'snackalert':
       state.settings.snackAlert = !state.settings.snackAlert; save(); render(true);
+      break;
+
+    case 'installapp':
+      if (deferredInstall) {
+        deferredInstall.prompt();
+        deferredInstall.userChoice.then(() => { deferredInstall = null; render(true); });
+      } else {
+        toast('这个浏览器不支持一键安装，按下方步骤手动装');
+      }
       break;
 
     case 'editfood': {
@@ -1520,6 +1700,19 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   });
 }
+
+/* 安卓 Chrome：捕获「可安装」事件，设置页就能一键装到桌面 */
+let deferredInstall = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstall = e;
+  if (ui.tab === 'settings') render(true);
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstall = null;
+  toast('已装到桌面，以后点图标就行');
+  if (ui.tab === 'settings') render(true);
+});
 
 /* 首次启动：生成本周计划 */
 ensureWeek(weekStart(todayISO()));
